@@ -1,0 +1,206 @@
+################################################Install PostgreSQL & Move Default Data Directory##########################################
+--Download the RPM files from this link
+https://download.postgresql.org/pub/repos/yum/14/redhat/rhel-8-x86_64/
+
+--remove temp repo if needed
+dnf module list postgresql
+cd /etc/yum.repos.d
+cat pgdg-redhat-all.repo | grep enabled=1
+
+--copy the RPM this directory & install
+cd /u02
+ll
+yum localinstall postgresql14-libs-14.3-1PGDG.rhel8.x86_64.rpm postgresql14-14.3-1PGDG.rhel8.x86_64.rpm postgresql14-server-14.3-1PGDG.rhel8.x86_64.rpm postgresql14-contrib-14.3-1PGDG.rhel8.x86_64.rpm
+
+--give permission to postgres user on /u02/postgres_datafile
+[root@test backups]# mkdir -p /u02/postgres_datafile
+[root@test backups]# chown -R postgres:postgres /u02/postgres_datafile
+[root@test backups]# chmod -R 775 /u02/postgres_datafile
+[root@test backups]# su - postgres
+    -bash: TMOUT: readonly variable
+
+--initiate the database
+[root@test data]# /usr/pgsql-14/bin/postgresql-14-setup initdb
+[root@test data]# systemctl start postgresql-14
+[root@test data]# systemctl enable postgresql-14
+[root@test data]# systemctl status postgresql-14
+
+--check default database
+sudo -u postgres psql
+SHOW data_directory;
+
+--change the default data directory
+[root@test data]# systemctl stop postgresql-14
+[root@test data]# systemctl status postgresql-14
+
+--copy old data to dest data directory
+rsync -av /var/lib/pgsql/14/data/ /u02/postgres_datafile/
+[root@test postgres_datafile]# pwd
+/u02/postgres_datafile
+[root@test postgres_datafile]# rm -rf pg_hba.conf
+[root@test postgres_datafile]# rm -rf pg_ident.conf
+[root@test postgres_datafile]# rm -rf postgresql.auto.conf
+[root@test postgres_datafile]# rm -rf postgresql.conf
+
+--delete old data [selected olny]
+cd /var/lib/pgsql/14/data/
+rm -rf current_logfiles
+rm -rf global
+rm -rf log
+rm -rf pg_commit_ts
+rm -rf pg_dynshmem
+rm -rf pg_logical
+rm -rf pg_multixact
+rm -rf pg_notify
+rm -rf pg_replslot
+rm -rf pg_serial
+rm -rf pg_snapshots
+rm -rf pg_stat
+rm -rf pg_stat_tmp
+rm -rf pg_subtrans
+rm -rf pg_tblspc
+rm -rf pg_twophase
+rm -rf pg_wal
+rm -rf pg_xact
+rm -rf postmaster.opts
+
+[root@test data]# pwd
+/var/lib/pgsql/14/data
+[root@test data]# ll
+total 52
+drwx------ 5 postgres postgres    41 Feb 12 21:34 base
+-rw------- 1 postgres postgres  4789 Feb 12 21:34 pg_hba.conf
+-rw------- 1 postgres postgres  1636 Feb 12 21:34 pg_ident.conf
+-rw------- 1 postgres postgres     3 Feb 12 21:34 PG_VERSION
+-rw------- 1 postgres postgres    88 Feb 12 21:34 postgresql.auto.conf
+-rw------- 1 postgres postgres 28792 Feb 13 15:49 postgresql.conf
+[root@test data]#
+
+--edit the config file
+[root@test data]# pwd
+/var/lib/pgsql/14/data
+[root@test data]# vi postgresql.conf
+    #------------------------------------------------------------------------------
+    # FILE LOCATIONS
+    #------------------------------------------------------------------------------
+
+    # The default values of these variables are driven from the -D command-line
+    # option or PGDATA environment variable, represented here as ConfigDir.
+
+    data_directory = '/u02/postgres_datafile/'              # use data in another directory
+                                            # (change requires restart)
+    #hba_file = '/u02/postgres_datafile/pg_hba.conf' # host-based authentication file
+                                            # (change requires restart)
+    #ident_file = '/u02/postgres_datafile/pg_ident.conf'     # ident configuration file
+                                            # (change requires restart)
+
+    # If external_pid_file is not explicitly set, no extra PID file is written.
+    #external_pid_file = ''                 # write an extra PID file
+                                            # (change requires restart)
+
+    #------------------------------------------------------------------------------
+
+	#------------------------------------------------------------------------------
+	# CONNECTIONS AND AUTHENTICATION
+	#------------------------------------------------------------------------------
+
+	# - Connection Settings -
+
+	listen_addresses = '*'		# what IP address(es) to listen on;
+						# comma-separated list of addresses;
+						# defaults to 'localhost'; use '*' for all
+						# (change requires restart)
+	port = 5432				# (change requires restart)
+
+--edit the hba file
+[root@test data]# vi pg_hba.conf
+    # IPv4 local connections:
+    host    all             all             0.0.0.0/0               trust
+    # IPv6 local connections:
+
+--now start the database
+[root@test data]# systemctl status postgresql-14
+[root@test data]# systemctl start postgresql-14
+
+sudo -u postgres psql
+SHOW data_directory;
+
+--this is log for database
+[root@test log]# pwd
+/u02/postgres_datafile/log
+[root@test log]# tail -1000f postgresql-Mon.log
+
+--verify the starting
+ps -ef |grep -i postgres
+netstat -apn |grep -i 5432
+
+--for pgadmin connection
+#systemctl stop firewalld
+#systemctl disable firewalld
+
+sudo -u postgres psql
+SHOW data_directory;
+show config_file;
+
+--show db list
+\l
+
+--wal file check
+SELECT COUNT(*) FROM pg_ls_dir('pg_wal') WHERE pg_ls_dir ~ '^[0-9A-F]{24}';
+
+################################################Database Create & User Management##########################################
+sudo -u postgres psql
+create database test;
+create user test with encrypted password 'test';
+grant all privileges on database test to test;
+
+--user and pass
+user: test
+pass: test
+db-name: test
+
+----------------add uuid extension---------------
+[root@test ~]# locate uuid-ossp.control
+/usr/pgsql-14/share/extension/uuid-ossp.control
+[root@test ~]# sudo -u postgres psql -U test
+could not change directory to "/root": Permission denied
+psql (14.3)
+Type "help" for help.
+
+test=> create EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION
+test=> select * from pg_extension;
+  oid  |  extname  | extowner | extnamespace | extrelocatable | extversion | extconfig | extcondition
+-------+-----------+----------+--------------+----------------+------------+-----------+--------------
+ 13734 | plpgsql   |       10 |           11 | f              | 1.0        |           |
+ 16386 | uuid-ossp |    16385 |         2200 | t              | 1.1        |           |
+(2 rows)
+
+test=> \q
+[root@test ~]#
+
+----------------Schema import-------------
+--export
+cd /test/postgresql_14.3/binary/bin
+./pg_dump -U test -d test -n public > /home/test/test.dmp
+
+--import
+[root@test test]# psql -U postgres -W -d test -f /home/test/test.dmp
+Password:
+
+--table drop from schema if needed
+sudo -u postgres psql -U test
+select 'drop table if exists "' || tablename || '" cascade;' 
+  from pg_tables
+ where schemaname = 'public';
+
+--if need add permission
+[root@test test]# sudo -u postgres psql
+could not change directory to "/home/test": Permission denied
+psql (14.3)
+Type "help" for help.
+
+postgres=# grant all privileges on database test to test;
+GRANT
+postgres=#
+
