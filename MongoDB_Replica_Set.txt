@@ -1,0 +1,69 @@
+#####################################MongoDB########################
+[root@ahosan1 FastApiReact]# vi /etc/yum.repos.d/mongodb-org-6.0.repo
+    [mongodb-org-6.0]
+    name=MongoDB Repository
+    baseurl=https://repo.mongodb.org/yum/redhat/$releasever/mongodb-org/6.0/x86_64/
+    gpgcheck=1
+    enabled=1
+    gpgkey=https://www.mongodb.org/static/pgp/server-6.0.asc
+
+[root@ahosan1 FastApiReact]# yum install -y mongodb-org
+[root@ahosan1 FastApiReact]# cat /etc/mongod.conf
+
+[root@ahosan1 FastApiReact]# systemctl start mongod
+[root@ahosan1 FastApiReact]# systemctl enable mongod
+[root@ahosan1 FastApiReact]# systemctl daemon-reload
+[root@ahosan1 FastApiReact]# systemctl status mongod
+
+[root@ahosan1 FastApiReact]# vi /etc/mongod.conf
+    # network interfaces
+    net:
+    port: 27017
+    bindIp: 0.0.0.0  # Enter 0.0.0.0,:: to bind to all IPv4
+
+DB-IP: 192.168.193.133
+
+##############MongoDB 2nd start#########################
+mongod -replSet repPrac --dbpath=/var/lib/mongo --port 27017 --oplogSize 200 --bind_ip 0.0.0.0
+mongod -replSet repPrac --dbpath=/MongoDB/data1 --port 27027 --oplogSize 200 --bind_ip 0.0.0.0
+mongod -replSet repPrac --dbpath=/MongoDB/data2 --port 27037 --oplogSize 200 --bind_ip 0.0.0.0
+or
+mongod -f /etc/mongod.conf
+mongod -f /etc/mongod1.conf
+mongod -f /etc/mongod2.conf
+
+netstat -tulpn | grep 27017
+netstat -tulpn | grep 27027
+netstat -tulpn | grep 27037
+
+test> config = {
+... _id: "repPrac",
+... "members": [
+... {_id: 0, host: "192.168.193.133:27017"},
+... {_id: 1, host: "192.168.193.133:27027"},
+... {_id: 2, host: "192.168.193.133:27037"},
+... ]
+... }
+{
+  _id: 'repPrac',
+  members: [
+    { _id: 0, host: '192.168.193.133:27017' },
+    { _id: 1, host: '192.168.193.133:27027' },
+    { _id: 2, host: '192.168.193.133:27037' }
+  ]
+}
+test>
+
+
+test> rs.initiate(config)
+{ ok: 1 }
+repPrac [direct: other] test>
+repPrac [direct: secondary] test> rs.status()
+
+mongosh --port 27017
+mongosh --port 27027
+mongosh --port 27037
+
+--connect to mongodb compass
+mongodb://192.168.193.133:27017,192.168.193.133:27027,192.168.193.133:27037/?replicaSet=repPrac
+
